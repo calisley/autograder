@@ -1,0 +1,9 @@
+.env
+/data
+/md
+
+/__pycache__
+/test_backups
+/test_dir
+test.py
+/*.csv
