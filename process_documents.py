@@ -11,7 +11,7 @@ from azure.ai.documentintelligence.models import DocumentContentFormat
 # Supported document formats
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".png", ".jpg", ".jpeg"}
 
-async def analyze_document_async(file_path, document_client):
+async def analyze_document(file_path, document_client):
     """Asynchronously calls Azure Document Intelligence to analyze a document."""
     try:
         # Open file asynchronously using aiofiles
@@ -31,7 +31,7 @@ async def analyze_document_async(file_path, document_client):
         print(f"Error processing {file_path}: {e}")
         return None
 
-async def process_all_documents_async(input_dir, markdown_dataframe, backup_dir=None):
+async def process_all_documents(input_dir, markdown_dataframe, backup_dir=None):
     """
     Process all supported document types asynchronously and save extracted markdown text.
 
@@ -73,7 +73,7 @@ async def process_all_documents_async(input_dir, markdown_dataframe, backup_dir=
         async def handle_file(file_name):
             """Processes a single file asynchronously."""
             file_path = os.path.join(input_dir, file_name)
-            markdown_content = await analyze_document_async(file_path, document_client)
+            markdown_content = await analyze_document(file_path, document_client)
             
             if markdown_content:
                 # Save backup as markdown file if required
@@ -111,4 +111,42 @@ def run_document_processing(input_dir, markdown_dataframe, backup_dir=None):
     Returns:
         pd.DataFrame: The extracted markdown data.
     """
-    return asyncio.run(process_all_documents_async(input_dir, markdown_dataframe, backup_dir))
+    return asyncio.run(process_all_documents(input_dir, markdown_dataframe, backup_dir))
+
+def process_single_document(file_path):
+    """
+    Asynchronously processes a single document and returns the markdown content.
+
+    Args:
+        file_path (str): Path to the document file.
+
+    Returns:
+        str: Extracted markdown content.
+    """
+    load_dotenv()
+    # Retrieve Azure credentials from environment variables
+    AZURE_ENDPOINT = os.environ.get("AZURE_ENDPOINT")
+    AZURE_API_KEY = os.environ.get("AZURE_API_KEY")
+
+    if not AZURE_ENDPOINT or not AZURE_API_KEY:
+        raise ValueError("Azure credentials (AZURE_ENDPOINT, AZURE_API_KEY) are missing from environment variables.")
+
+    # Use async with to ensure proper cleanup of the Azure client
+    client = DocumentIntelligenceClient(
+        endpoint=AZURE_ENDPOINT, 
+        credential=AzureKeyCredential(AZURE_API_KEY)
+    ) 
+    analyze_document(file_path, client)
+
+# Synchronous wrapper for single document processing
+def run_single_document_processing(file_path):
+    """
+    Synchronous wrapper to run async processing for a single document.
+
+    Args:
+        file_path (str): Path to the document file.
+
+    Returns:
+        str: Extracted markdown content.
+    """
+    return process_single_document(file_path)
