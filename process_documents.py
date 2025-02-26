@@ -31,7 +31,7 @@ async def analyze_document(file_path, document_client):
         print(f"Error processing {file_path}: {e}")
         return None
 
-async def process_all_documents(input_dir, markdown_dataframe, backup_dir=None):
+async def process_all_documents(input_dir, markdown_dataframe=None, backup_dir=None, truncate=None):
     """
     Process all supported document types asynchronously and save extracted markdown text.
 
@@ -39,6 +39,7 @@ async def process_all_documents(input_dir, markdown_dataframe, backup_dir=None):
         input_dir (str): Directory containing the documents.
         markdown_dataframe (str): CSV file path to save results.
         backup_dir (str, optional): Directory to save markdown backups.
+        truncate (list[int], optional): List of page numbers to exclude from PDFs.
 
     Returns:
         pd.DataFrame: A DataFrame containing filenames and extracted markdown text.
@@ -73,7 +74,36 @@ async def process_all_documents(input_dir, markdown_dataframe, backup_dir=None):
         async def handle_file(file_name):
             """Processes a single file asynchronously."""
             file_path = os.path.join(input_dir, file_name)
-            markdown_content = await analyze_document(file_path, document_client)
+            
+            # If file is PDF and truncate is specified, handle page removal
+            if file_name.lower().endswith('.pdf') and truncate:
+                import PyPDF2
+                
+                # Read PDF and get number of pages
+                with open(file_path, 'rb') as pdf_file:
+                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+                    total_pages = len(pdf_reader.pages)
+                    
+                    # Create new PDF writer
+                    pdf_writer = PyPDF2.PdfWriter()
+                    
+                    # Add all pages except those in truncate list
+                    for page_num in range(total_pages):
+                        if page_num + 1 not in truncate:  # page_num is 0-based, truncate list is 1-based
+                            pdf_writer.add_page(pdf_reader.pages[page_num])
+                    
+                    # Save modified PDF to temporary file
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                        pdf_writer.write(temp_file)
+                        temp_path = temp_file.name
+                
+                # Use temporary file for analysis
+                markdown_content = await analyze_document(temp_path, document_client)
+                # Clean up temporary file
+                os.unlink(temp_path)
+            else:
+                markdown_content = await analyze_document(file_path, document_client)
             
             if markdown_content:
                 # Save backup as markdown file if required
@@ -83,7 +113,13 @@ async def process_all_documents(input_dir, markdown_dataframe, backup_dir=None):
                     async with aiofiles.open(backup_path, "w", encoding="utf-8") as md_file:
                         await md_file.write(markdown_content)
                 
-                results.append({"file_name": file_name, "markdown": markdown_content})
+                # Strip extension to create submission_id
+                submission_id = os.path.splitext(file_name)[0]
+                results.append({
+                    "file_name": file_name,
+                    "submission_id": submission_id,
+                    "markdown": markdown_content
+                })
 
         # Create async tasks for each document
         tasks = [handle_file(f) for f in files]
@@ -93,13 +129,13 @@ async def process_all_documents(input_dir, markdown_dataframe, backup_dir=None):
             await coro
 
         # Convert results to DataFrame and save
-        df = pd.DataFrame(results, columns=["file_name", "markdown"])
+        df = pd.DataFrame(results, columns=["file_name", "submission_id", "markdown"])
         df.to_csv(markdown_dataframe, index=False)
         
         return df
 
 # Function to run the async processing from a synchronous script
-def run_document_processing(input_dir, markdown_dataframe, backup_dir=None):
+def run_document_processing(input_dir, markdown_dataframe, backup_dir=None, truncate=None):
     """
     Synchronous wrapper to run the async document processing function.
 
@@ -111,9 +147,9 @@ def run_document_processing(input_dir, markdown_dataframe, backup_dir=None):
     Returns:
         pd.DataFrame: The extracted markdown data.
     """
-    return asyncio.run(process_all_documents(input_dir, markdown_dataframe, backup_dir))
+    return asyncio.run(process_all_documents(input_dir, markdown_dataframe, backup_dir, truncate))
 
-def process_single_document(file_path):
+async def process_single_document(file_path):
     """
     Asynchronously processes a single document and returns the markdown content.
 
@@ -132,14 +168,13 @@ def process_single_document(file_path):
         raise ValueError("Azure credentials (AZURE_ENDPOINT, AZURE_API_KEY) are missing from environment variables.")
 
     # Use async with to ensure proper cleanup of the Azure client
-    client = DocumentIntelligenceClient(
+    async with DocumentIntelligenceClient(
         endpoint=AZURE_ENDPOINT, 
         credential=AzureKeyCredential(AZURE_API_KEY)
-    ) 
-    analyze_document(file_path, client)
+    ) as client:
+        return await analyze_document(file_path, client)
 
-# Synchronous wrapper for single document processing
-def run_single_document_processing(file_path):
+def process_single_document_sync(file_path):
     """
     Synchronous wrapper to run async processing for a single document.
 
@@ -149,4 +184,4 @@ def run_single_document_processing(file_path):
     Returns:
         str: Extracted markdown content.
     """
-    return process_single_document(file_path)
+    return asyncio.run(process_single_document(file_path))

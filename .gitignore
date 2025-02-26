@@ -7,3 +7,9 @@
 /test_dir
 test.py
 /*.csv
+
+/submissions*
+/subset
+
+API*
+solutions.docx

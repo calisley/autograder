@@ -31,7 +31,8 @@ async def _grade_single_submission(
           "correct_answer": "...",
           "points_awarded": "...",
           "total_points": "...",
-          "llm_explanation": "..."
+          "llm_explanation": "...",
+          "needs_human_eval": true/false
         },
         ...
       ]
@@ -41,8 +42,11 @@ async def _grade_single_submission(
         "You are an AI grader. You will:\n"
         "1) Parse the multiple questions and correct answers from the provided answer key.\n"
         "2) Locate the student's answers in their entire submission.\n"
-        "3) Use the rubric to decide points_awarded and total_points. If the rubric is missing, just make your own evaluations. \n"
-        "4) Return a structured JSON array in triple backticks, with one object per question:\n\n"
+        "3) Use the rubric to decide points_awarded. If the rubric is missing, use your discretion on the number of poitns to award. \n"
+        "4) points_awarded should be included in the text of the question. Consider the answer key as ground truth, and compare the student's answer to it, as opposed to your own evaluation when assessing correctness.\n"
+            "4a) both points_awarded and total_points should be singe numbers" 
+        "5) If you cannot parse the student's answer (e.g., they circled both true and false for a true/false question, or selected multiple options on a single answer multiple choice) return True for needs_human_eval. Otherwise that field should always be false. \n"
+        "5) Return a structured JSON array in triple backticks, with one object per question:\n\n"
         "[\n"
         "  {\n"
         "    \"question_text\": \"...\",\n"
@@ -51,6 +55,7 @@ async def _grade_single_submission(
         "    \"points_awarded\": \"...\",\n"
         "    \"total_points\": \"...\",\n"
         "    \"llm_explanation\": \"...\"\n"
+        "    \"needs_human_eval\": \"...\"\n"
         "  },\n"
         "  ...\n"
         "]\n"
@@ -82,14 +87,18 @@ async def _grade_single_submission(
 """
 
     try:
-        response = await openai_client.chat.completions.create(
-            model=model,
-            messages=[
+        params = {
+            "model": model,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
-            ],
-            #temperature=temperature
-        )
+            ]
+        }
+        
+        # if model == "o3-mini":
+        #     params["reasoning_effort"] = "high"
+            
+        response = await openai_client.chat.completions.create(**params)
         llm_output = response.choices[0].message.content
 
         # Attempt to find JSON within triple backticks
@@ -158,16 +167,18 @@ async def _grade_all_submissions_async(
                 #temperature=temperature
             )
             # Convert JSON objects to a list of dicts for final DF
-            for obj in json_array:
+            for index, obj in enumerate(json_array):
                 # We'll store the submission_id with each record
                 results.append({
                     "submission_id": submission_id,
+                    "question_num": index+1,
                     "question_text": obj.get("question_text", "").strip(),
                     "student_answer": obj.get("student_answer", "").strip(),
                     "correct_answer": obj.get("correct_answer", "").strip(),
                     "points_awarded": obj.get("points_awarded", ""),
                     "total_points": obj.get("total_points", ""),
-                    "llm_explanation": obj.get("llm_explanation", "").strip()
+                    "llm_explanation": obj.get("llm_explanation", "").strip(),
+                    "needs_human_eval": obj.get("needs_human_eval", "")
                 })
 
         tasks = [handle_submission(row) for _, row in df_submissions.iterrows()]
@@ -179,17 +190,19 @@ async def _grade_all_submissions_async(
     # Convert results to DataFrame
     df_result = pd.DataFrame(results, columns=[
         "submission_id",
+        "question_num",
         "question_text",
         "student_answer",
         "correct_answer",
         "points_awarded",
         "total_points",
-        "llm_explanation"
+        "llm_explanation",
+        "needs_human_eval"
     ])
     return df_result
 
 
-def grade_async(
+async def grade_async(
     df_submissions: pd.DataFrame,
     answer_key_markdown: str,
     rubric_markdown: str = "",
@@ -203,15 +216,13 @@ def grade_async(
       - Calls an LLM to parse out all questions, awarding points for each question
         per submission.
       - Returns a DataFrame of:
-        submission_id, question_text, student_answer, correct_answer,
+        submission_id, question_num, question_text, student_answer, correct_answer,
         points_awarded, total_points, llm_explanation
     """
-    return asyncio.run(
-        _grade_all_submissions_async(
-            df_submissions=df_submissions,
-            answer_key_markdown=answer_key_markdown,
-            rubric_markdown=rubric_markdown if rubric_markdown else "",
-            model=model,
-            #temperature=temperature
-        )
+    return await _grade_all_submissions_async(
+        df_submissions=df_submissions,
+        answer_key_markdown=answer_key_markdown,
+        rubric_markdown=rubric_markdown if rubric_markdown else "",
+        model=model,
+        #temperature=temperature
     )

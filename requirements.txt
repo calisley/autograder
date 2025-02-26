@@ -1,0 +1,8 @@
+aiohttp
+openai
+pandas
+azure-ai-documentintelligence
+tqdm
+aiofiles
+python-dotenv
+pypdf
