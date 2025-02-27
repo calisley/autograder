@@ -42,7 +42,7 @@ async def _grade_single_submission(
         "You are an AI grader. You will:\n"
         "1) Parse the multiple questions and correct answers from the provided answer key.\n"
         "2) Locate the student's answers in their entire submission.\n"
-        "3) Use the rubric to decide points_awarded. If the rubric is missing, use your discretion on the number of poitns to award. \n"
+        "3) Use the rubric to decide points_awarded. If the rubric is missing, use your discretion on the number of points to award. \n"
         "4) points_awarded should be included in the text of the question. Consider the answer key as ground truth, and compare the student's answer to it, as opposed to your own evaluation when assessing correctness.\n"
             "4a) both points_awarded and total_points should be singe numbers" 
         "5) If you cannot parse the student's answer (e.g., they circled both true and false for a true/false question, or selected multiple options on a single answer multiple choice) return True for needs_human_eval. Otherwise that field should always be false. \n"

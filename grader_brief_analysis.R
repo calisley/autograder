@@ -3,7 +3,7 @@ library(tidyr)
 library(tidyverse)
 
 # Load data
-df <- read.csv("/Users/cai529/Github/autograder/question_level_grades.csv")
+df <- read.csv("/Users/cai529/Github/autograder/question_level_grades_all.csv")
 real <- read.csv("/Users/cai529/Github/autograder/API-201-AB-_Final-Stage_1_scores.csv")
 
 # Rename real grades columns
@@ -109,3 +109,59 @@ print(t_test_questions)
 
 print("F-test for Joint Hypothesis (All Means Different):")
 print(anova_summary)
+
+score_variance <- df_final %>%
+  summarize(
+    var_total_score_human = var(Total.Score, na.rm = TRUE),
+    var_total_score_llm = var(total_score_llm, na.rm = TRUE)
+  )
+print(score_variance)
+
+library(clubSandwich)
+library(sandwich)
+# Run regression for score difference
+model <- lm(total_score_diff ~ 1, data = df_final)
+
+# Compute robust standard errors (variance is squared SE)
+robust_var_hc2 <- vcovHC(model, type = "HC2")[1, 1]
+robust_var_hc3 <- vcovHC(model, type = "HC3")[1, 1]
+
+# Print results
+print(robust_var_hc1)  # HC1 Robust Variance
+print(robust_var_hc2)  # HC2 Robust Variance
+print(robust_var_hc3)  # HC3 Robust Variance
+
+
+ggplot(score_variance_long, aes(x = source, y = variance, fill = source)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  ggtitle("Variance in Scores: Human vs. LLM")
+
+
+ggplot(df_final, aes(y = total_score_diff)) +
+  geom_boxplot(fill = "blue", alpha = 0.5) +
+  theme_minimal() +
+  ggtitle("Distribution of Score Differences (LLM - Human)")
+
+
+
+huge_miss_long <- huge_miss %>%
+  pivot_longer(
+    cols = matches("^q_\\d+_(llm|human)$"),  # Select all question columns with "_llm" or "_human"
+    names_to = c("question", "grader"),  
+    names_pattern = "q_(\\d+)_(llm|human)",  
+    values_to = "points_assigned"
+  ) %>%
+  pivot_wider(
+    names_from = grader,  # Spread out LLM and human columns
+    values_from = points_assigned
+  ) %>%
+  mutate(question = as.integer(question))%>%
+  arrange(submission_id, question)  # Ensure it's sorted
+
+# Print the transformed table
+
+huge_miss_long %>% select(submission_id, question, llm, human)
+
+
+ 

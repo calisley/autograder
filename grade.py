@@ -47,10 +47,12 @@ async def main():
 
     # 1. Convert all submissions in the directory to Markdown
     print("Converting submissions to Markdown...")
+    
     submissions = await process_all_documents(args.submissions_folder, "./submissions_markdown.csv","./submissions_backup", truncate=args.truncate)
     if submissions.empty:
         print(f"No valid documents found in {args.submissions_folder}")
         sys.exit(1)
+
 
     # 2. Convert the answer key document to Markdown
     if not os.path.isfile(args.answer_key):

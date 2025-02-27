@@ -23,6 +23,7 @@ async def analyze_document(file_path, document_client):
             model_id="prebuilt-layout",
             body=file_data,
             output_content_format=DocumentContentFormat.MARKDOWN,
+            polling=True,  # Ensure polling behavior is set
         )
         result = await poller.result()
         return result.content  # Extracted markdown text
@@ -70,6 +71,7 @@ async def process_all_documents(input_dir, markdown_dataframe=None, backup_dir=N
             os.makedirs(backup_dir, exist_ok=True)
 
         results = []
+        batch_size = 10
 
         async def handle_file(file_name):
             """Processes a single file asynchronously."""
@@ -121,12 +123,16 @@ async def process_all_documents(input_dir, markdown_dataframe=None, backup_dir=N
                     "markdown": markdown_content
                 })
 
-        # Create async tasks for each document
-        tasks = [handle_file(f) for f in files]
-
-        # Run all tasks with progress bar
-        for coro in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Processing documents"):
-            await coro
+        # Process files in batches of 10
+        for i in range(0, len(files), batch_size):
+            batch = files[i:i + batch_size]
+            batch_tasks = [handle_file(f) for f in batch]
+            
+            # Run batch tasks with progress bar
+            for coro in tqdm(asyncio.as_completed(batch_tasks), 
+                           total=len(batch_tasks), 
+                           desc=f"Processing batch {i//batch_size + 1}/{(len(files)-1)//batch_size + 1}"):
+                await coro
 
         # Convert results to DataFrame and save
         df = pd.DataFrame(results, columns=["file_name", "submission_id", "markdown"])
