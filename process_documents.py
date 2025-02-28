@@ -155,12 +155,14 @@ def run_document_processing(input_dir, markdown_dataframe, backup_dir=None, trun
     """
     return asyncio.run(process_all_documents(input_dir, markdown_dataframe, backup_dir, truncate))
 
-async def process_single_document(file_path):
+async def process_single_document(file_path, output_md_path=None):
     """
     Asynchronously processes a single document and returns the markdown content.
+    Optionally saves the markdown content to a file.
 
     Args:
         file_path (str): Path to the document file.
+        output_md_path (str, optional): Path to save the generated markdown file.
 
     Returns:
         str: Extracted markdown content.
@@ -178,16 +180,30 @@ async def process_single_document(file_path):
         endpoint=AZURE_ENDPOINT, 
         credential=AzureKeyCredential(AZURE_API_KEY)
     ) as client:
-        return await analyze_document(file_path, client)
+        markdown_content = await analyze_document(file_path, client)
+        
+        # Save markdown content to file if output path is provided
+        if markdown_content and output_md_path:
+            # Ensure directory exists
+            output_dir = os.path.dirname(output_md_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+                
+            # Write markdown content to file
+            async with aiofiles.open(output_md_path, "w", encoding="utf-8") as md_file:
+                await md_file.write(markdown_content)
+                
+        return markdown_content
 
-def process_single_document_sync(file_path):
+def process_single_document_sync(file_path, output_md_path=None):
     """
     Synchronous wrapper to run async processing for a single document.
 
     Args:
         file_path (str): Path to the document file.
+        output_md_path (str, optional): Path to save the generated markdown file.
 
     Returns:
         str: Extracted markdown content.
     """
-    return asyncio.run(process_single_document(file_path))
+    return asyncio.run(process_single_document(file_path, output_md_path))
