@@ -201,9 +201,8 @@ def process_single_document_sync(file_path, output_md_path=None):
 
     Args:
         file_path (str): Path to the document file.
-        output_md_path (str, optional): Path to save the generated markdown file.
 
     Returns:
         str: Extracted markdown content.
     """
-    return asyncio.run(process_single_document(file_path, output_md_path))
+    return asyncio.run(process_single_document(file_path))

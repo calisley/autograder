@@ -13,4 +13,6 @@ test.py
 
 API*
 solutions.docx
-*.xlsx
+./Scoring.xlsx
+/temp
+./*.md
