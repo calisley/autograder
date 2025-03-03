@@ -7,6 +7,13 @@ from dotenv import load_dotenv
 from azure.ai.documentintelligence.aio import DocumentIntelligenceClient
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.documentintelligence.models import DocumentContentFormat
+import hashlib
+
+import hashlib
+
+def hash_filename(filename: str) -> str:
+    """Generates a unique ID for a filename using its MD5 hash (first 10 characters)."""
+    return hashlib.md5(filename.encode("utf-8")).hexdigest()[:10]
 
 # Supported document formats
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".png", ".jpg", ".jpeg"}
@@ -118,7 +125,8 @@ async def process_all_documents(input_dir, markdown_dataframe=None, backup_dir=N
                 # Strip extension to create submission_id
                 submission_id = os.path.splitext(file_name)[0]
                 results.append({
-                    "file_name": file_name,
+                    "file_name": hash_filename(file_name),
+                    "original_file_name": file_name,
                     "submission_id": submission_id,
                     "markdown": markdown_content
                 })

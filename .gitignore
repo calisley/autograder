@@ -13,6 +13,12 @@ test.py
 
 API*
 solutions.docx
-./Scoring.xlsx
-/temp
+./ Scoring.xlsx
+/temp*
 ./*.md
+
+/trials 
+/*.zip
+/*.xlsx
+
+./Scoring.xlsx
