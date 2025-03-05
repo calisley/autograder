@@ -76,7 +76,7 @@ The custom modules (`llm_grader`, `process_documents`, `extract_problems`, `gene
 Run the script from the command line using:
 
 ```sh
-./grader.py submissions_folder [--answer_key ANSWER_KEY] [--blank_assignment BLANK_ASSIGNMENT]
+./grade.py submissions_folder [--answer_key ANSWER_KEY] [--blank_assignment BLANK_ASSIGNMENT]
             [--output_csv OUTPUT_CSV] [--rubric RUBRIC] [--truncate PAGES [PAGES ...]]
             [--backup_folder BACKUP_FOLDER]
 ```
