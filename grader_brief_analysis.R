@@ -3,8 +3,11 @@ library(tidyr)
 library(tidyverse)
 
 # Load data
-df <- read.csv("/Users/cai529/Github/autograder/question_level_grades_all.csv")
-real <- read.csv("/Users/cai529/Github/autograder/API-201-AB-_Final-Stage_1_scores.csv")
+df <- read.csv("/Users/cai529/Github/autograder/question_level_grades.csv")
+df <- read.csv("/Users/cai529/Github/autograder/trials/dpi-assignment-1/temp_dpi/questions_with_answers.csv")
+
+df <- read.csv("/Users/cai529/Github/autograder/grader_output.csv")
+real <- read.csv("/Users/cai529/Github/autograder/trials/dpi-assignment-1/human_scores.csv")
 
 # Rename real grades columns
 colnames(real) <- gsub("^X(\\d+)..\\d+..[0-9\\.]+\\.pts\\.$", "q_\\1", colnames(real))
@@ -19,7 +22,7 @@ df_total_score <- df %>%
 df_points <- df %>%
   pivot_wider(
     id_cols = submission_id,
-    names_from = question_num,
+    names_from = question_number,
     values_from = points_awarded,
     names_prefix = "q_"
   )
@@ -145,7 +148,7 @@ ggplot(df_final, aes(y = total_score_diff)) +
 
 
 
-huge_miss_long <- huge_miss %>%
+huge_miss_long <- df_final %>%
   pivot_longer(
     cols = matches("^q_\\d+_(llm|human)$"),  # Select all question columns with "_llm" or "_human"
     names_to = c("question", "grader"),  
@@ -163,5 +166,7 @@ huge_miss_long <- huge_miss %>%
 
 huge_miss_long %>% select(submission_id, question, llm, human)
 
+example<-df %>% filter(submission_id == "298020729") %>% select(submission_id, question_num, llm_explanation)
 
+huge_miss_long%>% select(submission_id, question, llm, human) %>% left_join(example, by=c("submission_id", "question"="question_num"))
  

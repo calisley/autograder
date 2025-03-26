@@ -15,8 +15,18 @@ from extract_problems import process_submissions, get_questions_with_context, st
 from generate_rubric import generate_rubrics
 from create_answer_key import question_level_answer_key
 from generate_answer_key import generate_key, select_best_responses
+from compile_feedback import generate_overall_feedback
 
 #TODO: add the ability to pass in the model to the functions
+#TODO:For when the class starts:
+	# Grade suggestions 
+	# Feedback about the whole quality of the assignment
+	# Feedback more than what a CA would write
+	# bring to “feedback for question 1”
+	# AI “augmented” grading?
+	# 	suggested points
+	# Time saving 
+
 
 async def main():
     parser = argparse.ArgumentParser(
@@ -109,7 +119,7 @@ async def main():
             args.submissions_folder,
             submissions_csv_path,
             submissions_backup_path,
-            truncate=args.truncate
+            truncate=args.truncate,
         )
         if submissions.empty:
             print(f"No valid documents found in {args.submissions_folder}")
@@ -210,25 +220,37 @@ async def main():
         rubric_df = pd.read_csv(rubric_csv_path)
 
 
-    # # 5. Perform the grading
-    # print("Grading assignments...")
+    # 5. Perform the grading
+    print("Grading assignments...")
 
-    # results_df = await grade_questions(
-    #     submission_by_question,
-    #     answer_key_df,
-    #     rubric_df,
-    #     client,
-    #     model="o3-mini",
-    #     batch_size=20
-    # )
+    results_df = await grade_questions(
+        submission_by_question,
+        answer_key_df,
+        rubric_df,
+        client,
+        model="o3-mini",
+        batch_size=20
+    )
 
-    # if results_df.empty:
-    #     print("No grading results were returned. Check your grader logic.")
-    #     sys.exit(1)
+    if results_df.empty:
+        print("No grading results were returned. Check your grader logic.")
+        sys.exit(1)
 
-    # # 6. Save results to the specified CSV
-    # results_df.to_csv(args.output_csv, index=False)
-    # print(f"Grading complete! Results saved to {args.output_csv}")
+    # 6. Save results to the specified CSV
+    results_df.to_csv(args.output_csv, index=False)
+    print(f"Grading complete! Results saved to {args.output_csv}")
+
+    #results_df = pd.read_csv("/Users/cai529/Github/autograder/trials/dpi-assignment-1/assignment_1_grades_1.csv")
+    # 7. Generate higher level feedback
+    print("Generating 'AI TF' feedback...")
+    overall_feedback = await generate_overall_feedback(
+        results_df,
+        client,
+        model="o3-mini",
+        batch_size=10
+    )
+    overall_feedback.to_csv("./feeedback.csv", index=False)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

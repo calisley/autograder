@@ -159,7 +159,3 @@ Run the script from the command line using:
 - Verify the format and paths of provided documents.
 
 ---
-
-# License
-
-This project is licensed under the MIT License. See the `LICENSE` file for details.

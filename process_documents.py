@@ -9,7 +9,6 @@ from azure.core.credentials import AzureKeyCredential
 from azure.ai.documentintelligence.models import DocumentContentFormat
 import hashlib
 
-import hashlib
 
 def hash_filename(filename: str) -> str:
     """Generates a unique ID for a filename using its MD5 hash (first 10 characters)."""
@@ -83,7 +82,8 @@ async def process_all_documents(input_dir, markdown_dataframe=None, backup_dir=N
         async def handle_file(file_name):
             """Processes a single file asynchronously."""
             file_path = os.path.join(input_dir, file_name)
-            
+            file_id = hash_filename(file_name)
+
             # If file is PDF and truncate is specified, handle page removal
             if file_name.lower().endswith('.pdf') and truncate:
                 import PyPDF2
@@ -125,9 +125,8 @@ async def process_all_documents(input_dir, markdown_dataframe=None, backup_dir=N
                 # Strip extension to create submission_id
                 submission_id = os.path.splitext(file_name)[0]
                 results.append({
-                    "file_name": hash_filename(file_name),
+                    "submission_id": file_id,
                     "original_file_name": file_name,
-                    "submission_id": submission_id,
                     "markdown": markdown_content
                 })
 
@@ -143,7 +142,7 @@ async def process_all_documents(input_dir, markdown_dataframe=None, backup_dir=N
                 await coro
 
         # Convert results to DataFrame and save
-        df = pd.DataFrame(results, columns=["file_name", "submission_id", "markdown"])
+        df = pd.DataFrame(results, columns=["submission_id","original_file_name", "markdown"])
         df.to_csv(markdown_dataframe, index=False)
         
         return df
