@@ -10,17 +10,17 @@ from openai import AsyncAzureOpenAI
 from docx2pdf import convert
 import concurrent.futures
 
-from llm_grader import grade_questions, grade_questions_simple
-from process_documents import process_all_documents, process_single_document
-from extract_problems import process_submissions, get_questions_with_context, strip_assignment
-from generate_rubric import generate_rubrics, expand_rubric
-from create_answer_key import question_level_answer_key
-from generate_answer_key import generate_key, select_best_responses
-from compile_feedback import generate_subquestion_feedback
-from replace_pp_link import replace_pingpong_urls_in_submissions
-from get_page_nums import map_questions_to_pages_llm
-from pdf2img import create_images
-from token_tracker import token_tracker
+from processing.grading.llm_grader import grade_questions, grade_questions_simple
+from processing.document_ingest.process_documents import process_all_documents, process_single_document
+from processing.extraction.extract_problems import process_submissions, get_questions_with_context, strip_assignment
+from processing.rubric_answer_key.generate_rubric import generate_rubrics, expand_rubric
+from processing.rubric_answer_key.create_answer_key import question_level_answer_key
+from processing.rubric_answer_key.generate_answer_key import generate_key, select_best_responses
+from processing.grading.compile_feedback import generate_subquestion_feedback
+from processing.extraction.replace_pp_link import replace_pingpong_urls_in_submissions
+from processing.extraction.get_page_nums import map_questions_to_pages_llm
+from processing.document_ingest.pdf2img import create_images
+from helpers.token_tracker import token_tracker
 from config import config
 
 #TODO: Send pages to LLM
