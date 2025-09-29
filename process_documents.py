@@ -123,7 +123,7 @@ async def process_all_documents(input_dir, markdown_dataframe=None, backup_dir=N
                         await md_file.write(markdown_content)
                 
                 # Strip extension to create submission_id
-                submission_id = os.path.splitext(file_name)[0]
+                #submission_id = os.path.splitext(file_name)[0]
                 results.append({
                     "submission_id": file_id,
                     "original_file_name": file_name,

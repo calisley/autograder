@@ -6,3 +6,11 @@ tqdm
 aiofiles
 python-dotenv
 pypdf
+docx2pdf
+PyPDF2
+PyMuPDF
+scikit-learn
+pydantic
+aiolimiter
+tiktoken
+numpy

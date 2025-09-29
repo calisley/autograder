@@ -11,13 +11,14 @@ import base64
 import ast
 
 import tiktoken  # <-- added
+from config import config
 
-# Setup rate limiters
-request_limiter = AsyncLimiter(100, 60)     # 500 requests per minute
-token_limiter = AsyncLimiter(100_000, 60)   # 500,000 tokens per minute
+# Setup rate limiters using centralized config
+request_limiter = AsyncLimiter(config.rate_limits.requests_per_minute, 60)
+token_limiter = AsyncLimiter(config.rate_limits.tokens_per_minute, 60)
 
 # Initialize the encoder for your model
-encoder = tiktoken.encoding_for_model("gpt-4")
+encoder = tiktoken.get_encoding(config.models.encoder_model)
 
 async def grade_questions(
     df_questions: pd.DataFrame,
@@ -104,7 +105,7 @@ Please grade the student's answer. Return a JSON object inside triple backticks 
 """
 
         # Token estimation
-        encoding = tiktoken.get_encoding("o200k_base")
+        encoding = tiktoken.get_encoding(config.models.encoder_model)
         system_tokens = len(encoding.encode(system_prompt))
         user_tokens = len(encoding.encode(user_text))
         total_tokens = system_tokens + user_tokens + image_tokens

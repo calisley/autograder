@@ -21,6 +21,7 @@ from replace_pp_link import replace_pingpong_urls_in_submissions
 from get_page_nums import map_questions_to_pages_llm
 from pdf2img import create_images
 from token_tracker import token_tracker
+from config import config
 
 #TODO: Send pages to LLM
 #TODO: Redo with proper structured outputs
@@ -75,12 +76,20 @@ async def main():
         default=None,
         help="Optional: Path to a CSV file containing PingPong threads data. If provided, will replace links with conversation text."
     )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="gpt-5-mini",
+        help="Azure OpenAI model to use for grading (default: gpt-5-mini)"
+    )
 
-    model = "o4-mini"
     args = parser.parse_args()
+    model = args.model
 
     #TEMP FILES
-    backup_folder = args.backup_folder
+    # Set backup folder to input_dir's parent folder
+    input_dir_parent = os.path.dirname(os.path.abspath(args.submissions_folder))
+    backup_folder = os.path.join(input_dir_parent, args.backup_folder)
 
     # Ensure the temp folder exists
     os.makedirs(backup_folder, exist_ok=True)
@@ -107,25 +116,41 @@ async def main():
     questions_markdown_path = os.path.join(backup_folder, "questions_markdown.csv")
     question_page_mapping_path = os.path.join(backup_folder, "question_page_mapping.csv")
 
-    #0 Inititalize end and LLM Client:
+    #0 Initialize and LLM Client:
     load_dotenv()
+    
+    # Validate configuration
+    config.validate()
     
     # Initialize Azure OpenAI client
     client = AsyncAzureOpenAI(
-        azure_endpoint=os.getenv("AZURE_ENDPOINT_GPT"),
-        api_key=os.getenv("AZURE_API_KEY_GPT"),
-        api_version="2024-12-01-preview"
+        azure_endpoint=config.azure.endpoint_gpt,
+        api_key=config.azure.api_key_gpt,
+        api_version=config.azure.api_version
     )
     
     # if os.path.exists(args.output_csv):
     #     sys.exit("Output CSV already exists. Please delete or rename it before running the grader.")
     
     # 1. Process submissions
-    # 1a. Convert all submissions in the directory to Markdown
+    # 1a. Validate and convert files to PDF if needed, then convert to Markdown
 
     if not os.path.exists(submissions_csv_path):
-        print("Converting docx files to pdf...")
-        convert(args.submissions_folder)
+        # Check if submissions folder exists
+        if not os.path.exists(args.submissions_folder):
+            print(f"Error: Submissions folder '{args.submissions_folder}' does not exist.")
+            sys.exit(1)
+        
+        # Validate and convert files
+        print("Validating and converting files...")
+        try:
+            convert(args.submissions_folder)
+            print("Successfully converted DOCX files to PDF")
+        except Exception as e:
+            print(f"Error converting DOCX files: {e}")
+            print("Please ensure all files are either PDF or DOCX format")
+            sys.exit(1)
+        
         # Launch create_images in the background using a thread
         loop = asyncio.get_running_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:
@@ -325,7 +350,10 @@ async def main():
         model=model,
         token_tracker=token_tracker
     )
-    overall_feedback.to_csv("./feeedback.csv", index=False)
+    # Save feedback to input_dir's parent folder
+    feedback_output_path = os.path.join(input_dir_parent, "feedback.csv")
+    overall_feedback.to_csv(feedback_output_path, index=False)
+    print(f"Feedback saved to {feedback_output_path}")
 
     # Print the grand total tokens at the end
     token_tracker.print_grand_total()

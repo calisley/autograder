@@ -113,7 +113,9 @@ async def process_submissions(
             "    \"answer_text\": \"...\"\n"
             "  },\n"
             "  ...\n"
-            "]"
+            "]\n"
+            "Return all question_number values in the format: 1a, 1b, 2a. If there are no subquestions, just return 1, 2, etc. "
+            "Never return formats like 1.1, 1(1), 1-1, or 1 1; convert them to 1a, 1b, etc."
         )
 
         user_prompt = f"""
@@ -219,6 +221,8 @@ async def get_questions_with_context(raw_assignment, client, model, output_csv, 
         "  },\n"
         "  ...\n"
         "]\n"
+        "Return all question_number values in the format: 1a, 1b, 2a. If there are no subquestions, just return 1, 2, etc."
+        "Never return formats like 1.1, 1(1), 1-1, or 1 1; convert them to 1a, 1b, etc."
     )
 
     user_prompt = f"""

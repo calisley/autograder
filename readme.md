@@ -16,8 +16,9 @@ This project provides an automated grading tool for student submissions. It proc
 - **Rubric Generation:**  
   - Processes a provided rubric document, or  
   - Auto-generates a synthetic rubric based on submissions and answer key.
-- **Grading Engine:** *(Commented out in the current code)*  
-  - Grades student responses against the answer key and rubric.
+- **Grading Engine:**  
+  - Grades student responses against the answer key and rubric using Azure OpenAI.
+  - Generates detailed feedback for each question.
 - **Temporary File Management:** Uses a backup folder to store intermediate files to avoid redundant processing.
 
 ---
@@ -86,7 +87,7 @@ Run the script from the command line using:
 ### Required Argument:
 
 - **`submissions_folder`**  
-  The folder containing student submissions in PDF/DOCX format.
+  The folder containing student submissions in PDF/DOCX format. All files will be validated and converted to PDF if needed.
 
 ### Optional Arguments:
 
@@ -97,7 +98,7 @@ Run the script from the command line using:
   Path to an unaltered copy of the assignment. If not provided, a blank assignment will be generated from a submission.
 
 - **`--output_csv`** (Default: `./grader_output.csv`)  
-  Path/filename for the CSV file that will contain the final grading results.
+  Path/filename for the CSV file that will contain the final grading results. Will be saved in the parent directory of the submissions folder.
 
 - **`--rubric`** (Optional)  
   Path to a rubric document. If not provided, a synthetic rubric is generated.
@@ -106,7 +107,13 @@ Run the script from the command line using:
   List of page numbers to exclude from PDF submissions (e.g., metadata pages).
 
 - **`--backup_folder`** (Default: `temp`)  
-  Directory to store temporary files generated during processing.
+  Directory to store temporary files generated during processing. Will be created in the parent directory of the submissions folder.
+
+- **`--threads_file`** (Optional)  
+  Path to a CSV file containing PingPong threads data. If provided, will replace links with conversation text.
+
+- **`--model`** (Default: `gpt-5-mini`)  
+  Azure OpenAI model to use for grading.
 
 ---
 
@@ -131,9 +138,10 @@ Run the script from the command line using:
 - A provided rubric document is processed.
 - If no rubric is provided, a synthetic rubric is generated.
 
-### Grading *(Commented Out in Code)*:
+### Grading:
 - Uses the rubric and answer key to grade submissions.
-- Saves the results to a CSV file.
+- Saves the results to a CSV file in the parent directory of the submissions folder.
+- Generates detailed feedback and saves it as `feedback.csv`.
 
 ---
 
@@ -142,20 +150,25 @@ Run the script from the command line using:
 ### Model Parameterization:
 - Allow specifying different model versions for various functions.
 
-### Automated Grading Execution:
-- Uncomment the grading process once fully tested.
+### Enhanced Error Handling:
+- Add more robust error handling and user-friendly error messages.
 
 ---
 
 # Troubleshooting
 
-### Output CSV Already Exists:
-- If `grader_output.csv` exists, delete or rename it before running the script.
+### File Format Issues:
+- Ensure all submission files are either PDF or DOCX format.
+- The script will attempt to convert DOCX files to PDF automatically.
 
 ### Missing Files:
 - Ensure required files (e.g., Markdown conversions, extracted questions) exist in the backup folder.
 
 ### Rubric and Answer Key Issues:
 - Verify the format and paths of provided documents.
+
+### Output Files:
+- All output files (including `grader_output.csv` and `feedback.csv`) are saved in the parent directory of the submissions folder.
+- Temporary files are stored in the `temp` folder within the parent directory.
 
 ---

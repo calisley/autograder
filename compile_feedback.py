@@ -6,10 +6,11 @@ from tqdm.asyncio import tqdm_asyncio
 from openai import AsyncAzureOpenAI
 from aiolimiter import AsyncLimiter
 import tiktoken
+from config import config
 
-# Setup rate limiters
-request_limiter = AsyncLimiter(100, 60)     # 500 requests per minute
-token_limiter = AsyncLimiter(100_000, 60)   # 500,000 tokens per minute
+# Setup rate limiters using centralized config
+request_limiter = AsyncLimiter(config.rate_limits.requests_per_minute, 60)
+token_limiter = AsyncLimiter(config.rate_limits.tokens_per_minute, 60)
 
 async def generate_subquestion_feedback(
     df_feedback: pd.DataFrame,
@@ -39,7 +40,7 @@ async def generate_subquestion_feedback(
     df["question_feedback"] = ""
 
     # Initialize tiktoken encoder
-    encoder = tiktoken.get_encoding("o200k_base")
+    encoder = tiktoken.get_encoding(config.models.encoder_model)
 
     # --------------------------------------------------------------
     # 2.  System prompt (unchanged)
