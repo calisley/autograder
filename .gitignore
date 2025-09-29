@@ -23,3 +23,5 @@ solutions.docx
 
 ./Scoring.xlsx
 .Rproj.user
+__pycache__/
+*.py[cod]
