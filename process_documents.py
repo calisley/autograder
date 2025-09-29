@@ -15,7 +15,7 @@ def hash_filename(filename: str) -> str:
     return hashlib.md5(filename.encode("utf-8")).hexdigest()[:10]
 
 # Supported document formats
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".png", ".jpg", ".jpeg"}
+SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
 
 async def analyze_document(file_path, document_client):
     """Asynchronously calls Azure Document Intelligence to analyze a document."""
@@ -212,4 +212,4 @@ def process_single_document_sync(file_path, output_md_path=None):
     Returns:
         str: Extracted markdown content.
     """
-    return asyncio.run(process_single_document(file_path))
+    return asyncio.run(process_single_document(file_path, output_md_path=output_md_path))

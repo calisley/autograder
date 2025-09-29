@@ -4,6 +4,7 @@ import pandas as pd
 from tqdm import tqdm
 import random
 from openai import AsyncAzureOpenAI
+import json
 
 async def generate_rubric_for_question(question_text: str, question_context:str, question_answer:str, question_explanation:str, points: int, sample_answers: list, 
                                       openai_client: AsyncAzureOpenAI, model: str = "gpt-4o") -> str:
@@ -326,6 +327,76 @@ async def validate_rubrics(rubrics: dict, submissions: pd.DataFrame, openai_clie
     return rubrics
 
 
-# Example usage:
-# updated_rubrics = await validate_rubrics(rubrics, questions_and_answers, client, model="gpt-4o")
-#python3 grade.py ./trials/dpi-assignment-2/Assignment\ 2\ Submissions --output_csv ./trials/dpi-assignment-2/assignment_2_grades.csv --backup_folder ./trials/dpi-assignment-2/temp_dpi/
+async def expand_rubric(rubric_markdown: str, questions: pd.DataFrame, openai_client: AsyncAzureOpenAI, model: str = "o3-mini", output_csv="./expanded_rubric_by_question.csv", token_tracker=None) -> pd.DataFrame:
+    """
+    Expand a full markdown rubric into a question-level detailed rubric DataFrame.
+
+    Args:
+        rubric_markdown: The full markdown file content as a single string.
+        questions: DataFrame with columns including ['question_number', 'question_text', 'question_context', 'best_answer', 'best_explanation'].
+        openai_client: Azure OpenAI client.
+        model: Model to use.
+
+    Returns:
+        A DataFrame with ['question_number', 'rubric', 'total_points'].
+    """
+    system_prompt = (
+        "You are an expert educator and grader. You will be given a full grading rubric for multiple questions.\n"
+        "Expand each question's rubric to make it maximally detailed, machine-readable, and sufficient for an AI grader.\n"
+        "Maintain the original rubric's point allotments per question, but break down the point allocations into a (+1, -1, etc.) structure and elaborate on exactly what earns or loses points.\n"
+        "The MINIMUM number of points you can score is 0. The maximum number of points is the total points for the question. The point breakdown should clearly indicate what gets no points, 1 point, 2 points, etc...\n"
+        "The rubric generated for each subquestion should be returned in markdown"
+        "Important rules:\n"
+        "- Preserve the rubric's point allocations.\n"
+        "- Never invent new grading criteria. You can hypothesize about what students might submit, but that should not be used to create new critera.\n"
+        "- Be maximally clear, detailed, and mechanical.\n"
+        "- Only output a JSON array of objects. Each object must have three keys: 'question_number, 'rubric', 'total_points'\n"
+        "- The JSON must be parseable with no additional commentary or headers.\n"
+
+        "Keep the rubric breakdown by subquestion. Do not aggregate questions by their higher question number. Do not change the sub-question name. The 'expanded rubric' field itself should be MARKDOWN! not JSON. "
+    )
+
+    # Build a compressed string of the questions for context
+    questions_context = "\n\n".join([
+        f"{row['question_number']}:\n{row['question_text']}\nContext: {row['question_context']}"
+        for _, row in questions.iterrows()
+    ])
+
+    user_prompt = f"""
+    QUESTIONS CONTEXT:
+    {questions_context}
+
+    CURRENT RUBRIC:
+    {rubric_markdown}
+
+    Expand each question's rubric individually, following all instructions given.
+
+    Output only a valid JSON array.
+    """
+    if token_tracker:
+        token_tracker.add("map_questions_to_pages_llm", system_prompt+user_prompt)
+    try:
+        response = await openai_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+        )
+
+        content = response.choices[0].message.content.strip()
+
+        # Parse the returned JSON
+        rubric_list = json.loads(content)
+
+        expanded_df = pd.DataFrame(rubric_list)
+
+        if not set(["question_number", "rubric","total_points"]).issubset(expanded_df.columns):
+            raise ValueError("Returned JSON does not have expected keys ['question_number', 'rubric','total_points'].")
+        
+        expanded_df.to_csv(output_csv, index=False)
+        return expanded_df 
+
+    except Exception as e:
+        print(f"Error expanding rubric: {e}")
+        raise

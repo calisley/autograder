@@ -1,13 +1,11 @@
-import os
-import asyncio
 import pandas as pd
 import json
-from tqdm import tqdm
 import aiofiles
-from dotenv import load_dotenv
 from tqdm.asyncio import tqdm_asyncio
 from openai import AsyncAzureOpenAI
 import re
+import tiktoken
+from typing import Any
 
 # async def structure_submissions(markdown_text: str, stripped_assignment:str, openai_client: AsyncAzureOpenAI, model="gpt-4o") -> list:
 #     """
@@ -72,27 +70,31 @@ async def process_submissions(
     questions: pd.DataFrame,
     client: AsyncAzureOpenAI,
     output_csv: str = "extracted_answers.csv",
-    model: str = "gpt-4o"
+    model: str = "gpt-4o",
+    token_tracker=None
 ) -> pd.DataFrame:
     """
-    Process submissions to extract student's answer for each question from markdown content.
-    
+    Process submissions to extract each student's answer for each question from markdown content,
+    and append the corresponding question_context (looked up by question_number).
+
     Expects:
-      - df: DataFrame with columns ["submission_id", "markdown"]
+      - df: DataFrame with columns ["submission_id", "original_file_name", "markdown"]
       - questions: DataFrame with columns ["question_number", "question_text", "question_context", "points"]
       - output_csv: Path to save backup CSV
-    
+
     Returns a DataFrame with columns:
-      submission_id, question_number, question_context, question_text, answer_text, points
+      submission_id, original_file_name, question_number, question_text,
+      question_context, answer_text, points
     """
-    
-    results = []
-    
+
+    results: list[dict[str, Any]] = []
+
     async def process_submission(row: pd.Series):
-        submission_id = row['submission_id']
-        submission_markdown = row['markdown']
-        
-        # Concatenate question details in a clear format.
+        submission_id = row["submission_id"]
+        submission_markdown = row["markdown"]
+        file_name = row["original_file_name"]
+
+        # Build a prompt listing all questions (number + text)
         questions_details = ""
         for _, question in questions.iterrows():
             questions_details += (
@@ -100,7 +102,7 @@ async def process_submissions(
                 f"Question: {question['question_text']}\n"
                 "-----\n"
             )
-        
+
         system_prompt = (
             "You are a strict JSON formatter. Do not include any markdown or code fences in your response. "
             "Do not include any text outside of the JSON. Only output valid JSON in the following format:\n"
@@ -108,12 +110,12 @@ async def process_submissions(
             "  {\n"
             "    \"question_number\": \"1\",\n"
             "    \"question_text\": \"...\",\n"
-            "    \"answer_text\": \"...\",\n"
+            "    \"answer_text\": \"...\"\n"
             "  },\n"
             "  ...\n"
             "]"
         )
-        
+
         user_prompt = f"""
 Please extract the student's answer for each question from the submission below.
 
@@ -128,11 +130,15 @@ Return your answer as valid JSON only, in the following format:
   {{
     "question_number": "<question_number>",
     "question_text": "<question_text>",
-    "answer_text": "<extracted answer>"  }},
+    "answer_text": "<extracted answer>"
+  }},
   ...
 ]
-IMPORTANT: Do not include any additional commentary. Your response MUST be in valid JSON.  Provide the answer to each question in the submission, do not cut off your response early.
+IMPORTANT: Do not include any additional commentary. Your response MUST be in valid JSON. Provide the answer to each question in the submission, do not cut off your response early.
 """
+        if token_tracker:
+            token_tracker.add("process_submissions", system_prompt+user_prompt)
+
         try:
             response = await client.chat.completions.create(
                 model=model,
@@ -148,16 +154,30 @@ IMPORTANT: Do not include any additional commentary. Your response MUST be in va
                 json_str = match.group(1).strip()
             else:
                 json_str = result.strip()
-                
+
             if not json_str:
                 raise ValueError("Extracted JSON string is empty.")
 
             data = json.loads(json_str)
 
-            # Add submission_id to each object.
+            # For each extracted answer, look up question_context and points, then append
             for obj in data:
+                q_num = obj.get("question_number", "")
+                # Find matching row in questions DataFrame
+                question_row = questions.loc[questions["question_number"] == q_num]
+                if not question_row.empty:
+                    context = question_row.iloc[0]["question_context"]
+                    points = question_row.iloc[0].get("points", None)
+                else:
+                    context = ""
+                    points = None
+
+                obj["question_context"] = context
+                obj["points"] = points
+                obj["original_file_name"] = file_name
                 obj["submission_id"] = submission_id
                 results.append(obj)
+
         except json.JSONDecodeError:
             print(f"Failed to parse JSON for submission {submission_id}.")
             print("Response was:")
@@ -165,19 +185,22 @@ IMPORTANT: Do not include any additional commentary. Your response MUST be in va
             print(len(result))
         except Exception as e:
             print(f"Error processing submission {submission_id}: {e}")
-    
-    # Create one task per submission.
-    submission_tasks = [process_submission(row) for _, row in df.iterrows()]
-    
-    # Process all tasks concurrently with progress tracking.
-    await tqdm_asyncio.gather(*submission_tasks, desc="Processing Submissions")
-    
+
+    # Create one task per submission
+    tasks = [process_submission(row) for _, row in df.iterrows()]
+
+    # Process all tasks concurrently with a progress bar
+    await tqdm_asyncio.gather(*tasks, desc="Processing Submissions")
+
     df_results = pd.DataFrame(results)
     df_results.to_csv(output_csv, index=False)
+
+    if token_tracker:
+        token_tracker.print_process("process_submissions")
     return df_results
 
 
-async def get_questions_with_context(markdown_text: str, openai_client: AsyncAzureOpenAI, model="gpt-4o", output_csv:str = "./temp/questions_with_context.csv") -> list:
+async def get_questions_with_context(raw_assignment, client, model, output_csv, token_tracker=None):
     """
     Extract questions and answers from markdown text using Azure OpenAI.
     Returns a list of dictionaries containing question_number, question_text, points, and answer_text.
@@ -201,7 +224,7 @@ async def get_questions_with_context(markdown_text: str, openai_client: AsyncAzu
     user_prompt = f"""
     Please create a structured representation of this assignment from the following markdown text:
 
-    {markdown_text}
+    {raw_assignment}
 
     In addition extract the number of points it is worth. This information should be available in the question text. If a question has multiple parts, and only specifies the point total for the whole question, use your discretion to divide the points among the parts.
 
@@ -220,8 +243,11 @@ async def get_questions_with_context(markdown_text: str, openai_client: AsyncAzu
     Return your answer as valid JSON only. 
     """
 
+    if token_tracker:
+        token_tracker.add("get_questions_with_context", system_prompt+user_prompt)
+
     try:
-        response = await openai_client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -251,6 +277,8 @@ async def get_questions_with_context(markdown_text: str, openai_client: AsyncAzu
         # Save backup to CSV
         df_results.to_csv(output_csv, index=False)
 
+        if token_tracker:
+            token_tracker.print_process("get_questions_with_context")
         return df_results
     
     except json.JSONDecodeError:
@@ -263,13 +291,12 @@ async def get_questions_with_context(markdown_text: str, openai_client: AsyncAzu
         print(f"Other error: {e}")
         return []
 
-
-
-
 async def strip_assignment(
     df_submissions: pd.DataFrame,
     model: str = "gpt-4o",
-    output_md: str= "./temp/blank_assignment.md"
+    client:AsyncAzureOpenAI= None,
+    output_md: str= "./temp/blank_assignment.md",
+    token_tracker = None
 ) -> str:
     """
     Takes the first submission in df_submissions, sends its markdown to the LLM, 
@@ -307,14 +334,9 @@ async def strip_assignment(
     ASSIGNMENT WITH ANSWERS:
     {markdown_text}
     """
-    load_dotenv()
-    
-    # Initialize Azure OpenAI client
-    client = AsyncAzureOpenAI(
-        azure_endpoint=os.getenv("AZURE_ENDPOINT_GPT"),
-        api_key=os.getenv("AZURE_API_KEY_GPT"),
-        api_version="2024-12-01-preview"
-    )
+   
+    if token_tracker:
+        token_tracker.add("strip_assignment", system_prompt+user_prompt)
 
     try:
         response = await client.chat.completions.create(
@@ -335,4 +357,6 @@ async def strip_assignment(
     async with aiofiles.open(output_md, "w", encoding="utf-8") as md_file:
         await md_file.write(stripped_assignment)
 
+    if token_tracker:
+        token_tracker.print_process("strip_assignment")
     return stripped_assignment
