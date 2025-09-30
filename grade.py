@@ -4,10 +4,12 @@ import os
 import sys
 import argparse
 import asyncio
+import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from openai import AsyncAzureOpenAI
 from docx2pdf import convert
+
 import concurrent.futures
 
 from processing.grading.llm_grader import grade_questions, grade_questions_simple
@@ -352,8 +354,30 @@ async def main():
     )
     # Save feedback to input_dir's parent folder
     feedback_output_path = os.path.join(input_dir_parent, "feedback.csv")
-    overall_feedback.to_csv(feedback_output_path, index=False)
+
+    # Join in ids to map back to students
+    parts = submissions['original_file_name'].str.split('_', n=4, expand=True)
+    parts.columns = ['p0','p1','p2','p3','rest']  # rest = everything after the 3rd underscore
+
+    # 2) derive fields with/without LATE
+    is_late = parts['p1'].eq('LATE')
+
+    submissions['username']   = parts['p0']
+    submissions['late']       = is_late
+
+    # if LATE present: canvas_id=p2, student_id=p3 ; else: canvas_id=p1, student_id=p2
+    submissions['canvas_id']  = np.where(is_late, parts['p2'], parts['p1'])
+    submissions['student_id'] = np.where(is_late, parts['p3'], parts['p2'])
+
+    # 3) coerce IDs to nullable integers (keeps NaN if something doesn't match)
+    submissions['canvas_id']  = pd.to_numeric(submissions['canvas_id'], errors='coerce').astype('Int64')
+    submissions['student_id'] = pd.to_numeric(submissions['student_id'], errors='coerce').astype('Int64')
+    
+    id_map = submissions[['submission_id', 'original_file_name', 'username', 'late', 'canvas_id', 'student_id']]
+
+    final_output = pd.merge(id_map, overall_feedback, on='submission_id', how='left')
     print(f"Feedback saved to {feedback_output_path}")
+    final_output.to_csv(feedback_output_path, index=False)
 
     # Print the grand total tokens at the end
     token_tracker.print_grand_total()
